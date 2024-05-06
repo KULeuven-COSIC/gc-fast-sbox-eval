@@ -10,9 +10,3 @@
 [submodule "Programs/Circuits"]
 	path = Programs/Circuits
 	url = https://github.com/mkskeller/bristol-fashion
-[submodule "MOTION/extern/fmt"]
-	path = MOTION/extern/fmt
-	url = https://github.com/fmtlib/fmt.git
-[submodule "MOTION/extern/flatbuffers"]
-	path = MOTION/extern/flatbuffers
-	url = https://github.com/google/flatbuffers.git
