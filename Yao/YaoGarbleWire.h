@@ -10,6 +10,8 @@
 #include "BMR/Register.h"
 #include "config.h"
 #include "YaoWire.h"
+#include "Processor/Instruction.h"
+#include "GC/Clear.h"
 
 #include <map>
 
@@ -19,6 +21,7 @@ class ProcessorBase;
 
 class YaoGarbleWire : public YaoWire
 {
+    typedef GC::Secret<YaoGarbleWire> whole_type;
 public:
 	typedef YaoGarbler Party;
 	typedef YaoGarbleInput Input;
@@ -60,6 +63,13 @@ public:
 	static void convcbit(Integer& dest, const GC::Clear& source,
 			GC::Processor<GC::Secret<YaoGarbleWire>>&);
 
+	static void projs(GC::Processor<GC::Secret<YaoGarbleWire>> &processor, const vector<int>& args);
+	static void projs_multithread(GC::Processor<GC::Secret<YaoGarbleWire>> &processor, const vector<int>& args);
+	static void projs_singlethread(GC::Memory<GC::Secret<YaoGarbleWire>> &S, const vector<int>& args, Key *gate, std::size_t start, std::size_t end, PRNG &prng, YaoGarbler &garbler, long counter);
+
+	static void convcbit2s(GC::Processor<whole_type>& processor,
+		const BaseInstruction& instruction);
+
 	void randomize(PRNG& prng);
 	void set(Key key, bool mask);
 
@@ -89,6 +99,7 @@ public:
 	void public_input(bool value);
 	void op(const YaoGarbleWire& left, const YaoGarbleWire& right, Function func);
 	char get_output();
+	uint8_t get_output(std::size_t n);
 
 	template<class T>
 	void my_input(T&, bool value, int n_bits)
@@ -108,6 +119,9 @@ public:
 			inputter.garbler.receiver_input_keys.back().push_back(full_key());
 		}
 	}
+	void XOR(const YaoGarbleWire &x, const YaoGarbleWire &y);
+	void XOR(const YaoGarbleWire &x, bool y);
+	void XOR(int n, const YaoGarbleWire &x, const GC::Clear &y);
 };
 
 inline void YaoGarbleWire::randomize(PRNG& prng)

@@ -15,6 +15,7 @@
 #include "GC/Secret.h"
 #include "Networking/Player.h"
 #include "OT/OTExtensionWithMatrix.h"
+#include "YaoProjGate.h"
 
 #include <thread>
 
@@ -66,6 +67,7 @@ public:
 	void process_receiver_inputs();
 
 	Key get_delta() { return master.get_delta(); }
+	const std::vector<Key>& get_deltas(std::size_t n) { return master.get_deltas(n); }
 	void store_gate(const YaoGate& gate);
 
 	int get_threshold() { return master.threshold; }

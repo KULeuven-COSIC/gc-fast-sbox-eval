@@ -39,10 +39,23 @@ public:
 	bool get_signal() const { return _mm_cvtsi128_si32(r) & 1; }
 	void set_signal(bool signal);
 
+	// returns the n least significant bits
+	// n <= 8
+	uint8_t get_signal(std::size_t n) const;
+	// sets the n least significant bits to signal
+	// n<=8
+	void set_signal(std::size_t n, uint8_t signal);
+
 	Key doubling(int i) const;
 
 	template <class T>
 	T get() const;
+
+	// computes the inner product of the bit vector x and delta, i.e.
+	// x = x0 x1 x2 x3 ...
+	// delta = d0 d1 d2 d3 ...
+	// returns x0 * d0 + x1 * d1 + ...
+	static Key prod(uint8_t x, const std::vector<Key> &delta);
 };
 
 ostream& operator<<(ostream& o, const Key& key);

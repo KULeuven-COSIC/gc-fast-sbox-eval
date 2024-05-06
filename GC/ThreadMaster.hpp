@@ -29,8 +29,8 @@ ThreadMaster<T>& ThreadMaster<T>::s()
 }
 
 template<class T>
-ThreadMaster<T>::ThreadMaster(OnlineOptions& opts) :
-        P(0), opts(opts)
+ThreadMaster<T>::ThreadMaster(OnlineOptions& opts, int n_threads) :
+        P(0), opts(opts), n_threads(n_threads)
 {
     if (singleton)
         throw runtime_error("there can only be one");

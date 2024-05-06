@@ -17,6 +17,7 @@
 #include "GC/Thread.hpp"
 #include "GC/ShareSecret.hpp"
 #include "YaoCommon.hpp"
+#include "YaoProjGate.h"
 
 void YaoEvalWire::random()
 {
@@ -45,7 +46,7 @@ void YaoEvalWire::and_(GC::Processor<GC::Secret<YaoEvalWire> >& processor,
 
 	processor.complexity += total;
 	int i_thread = 0, start = 0;
-	for (auto& x : party.get_splits(args, threshold, total))
+	for (auto& x : party.get_splits(args, threshold, total, 0, 4))
 	{
 		auto i_gate = x[0];
 		auto end = x[1];
@@ -194,10 +195,13 @@ bool YaoEvalWire::get_output()
 {
 	YaoEvaluator::s().taint();
 	bool res = external() ^ YaoEvaluator::s().output_masks.pop_front();
-#ifdef DEBUG
-    cout << "output " << res << " mask " << (external() ^ res) << " external() "
-            << external() << endl;
-#endif
+	return res;
+}
+
+uint8_t YaoEvalWire::get_output(std::size_t n) {
+	YaoEvaluator::s().taint();
+	uint8_t decode = YaoEvaluator::s().output_masks.pop_front();
+	uint8_t res = key_.get_signal(n) ^ decode;
 	return res;
 }
 
@@ -219,6 +223,96 @@ void YaoEvalWire::convcbit(Integer& dest, const GC::Clear& source,
 	dest = source;
 	evaluator.P->send_long(0, source.get());
 	throw needs_cleaning();
+}
+
+void YaoEvalWire::projs(GC::Processor<GC::Secret<YaoEvalWire>> &processor, const vector<int>& args) {
+	projs_multithread(processor, args);
+}
+
+void YaoEvalWire::projs_singlethread(GC::Memory<GC::Secret<YaoEvalWire>> &S, const vector<int> &args, Key *gate_ptr, std::size_t start, std::size_t end, PRNG &, YaoEvaluator &evaluator, long counter) {
+	std::size_t source_size = args[2];
+	int dl = GC::Secret<YaoEvalWire>::default_length;
+	for(std::size_t i=start; i<end; i += 3) {
+		int n = args[i];
+		// if n > the default register size, e.g. 64, the operation uses n_units registers of size 64
+		int n_units = DIV_CEIL(n, dl);
+		for(int k=0; k < n_units; k++) {
+			auto &dest = S[args[i+1]+k];
+			auto &src = S[args[i+2]+k];
+			int nk = min(dl, n - k*dl);
+			dest.resize_regs(nk);
+			for(int j=0; j<nk; j++) {
+				YaoEvalWire &dest_wire = dest.get_reg(j);
+				const YaoEvalWire &src_wire = src.get_reg(j);
+				YaoProjGate gate(source_size, gate_ptr);
+				gate.eval(evaluator.mmo, dest_wire, src_wire, counter);
+				gate_ptr += gate.garbled_table_size();
+				counter++;
+			}
+		}
+
+	}
+}
+
+void YaoEvalWire::projs_multithread(GC::Processor<GC::Secret<YaoEvalWire> >& processor, const vector<int>& args)
+{
+	YaoEvaluator& party = YaoEvaluator::s();
+	int source_size = args[2];
+	int threshold = 1024;
+	std::size_t proj_size = YaoProjGate::sizeof_table(source_size);
+	int tt_len = DIV_CEIL(1 << source_size, 4);
+	int total = count_proj_args(args, 3+tt_len);
+	if (total < threshold)
+	{
+		// run in single thread
+		Key *gate_ptr = (Key*) party.gates.consume(total * proj_size);
+		SeededPRNG prng;
+		projs_singlethread(processor.S, args, gate_ptr, 3+tt_len, args.size(), prng, party, party.counter);
+		party.counter += total;
+		return;
+	}
+
+	processor.complexity += total;
+	int i_thread = 0;
+	size_t start = 3+tt_len;
+	for (auto& x : party.get_splits(args, threshold, total, 3+tt_len, 3))
+	{
+		auto n_gates = x[0];
+		auto end = x[1];
+		Key* gate_ptr = (Key*) party.gates.consume(n_gates * proj_size);
+		party.jobs[i_thread++]->dispatch(processor, args, start,
+					end, source_size, gate_ptr, party.get_gate_id());
+		party.counter += n_gates;
+		start = end;
+	}
+	party.wait(i_thread);
+}
+
+void YaoEvalWire::XOR(const YaoEvalWire &x, const YaoEvalWire &y) {
+	set(x.key() ^ y.key());
+}
+
+void YaoEvalWire::XOR(const YaoEvalWire &x, bool) {
+	// the label representing the constant is chosen to be 0
+	set(x.key());
+}
+
+void YaoEvalWire::XOR(int, const YaoEvalWire &x, const GC::Clear&) {
+	// the label representing the constant is chosen to be 0
+	set(x.key());
+}
+
+void YaoEvalWire::convcbit2s(GC::Processor<whole_type>& processor,
+		const BaseInstruction& instruction)
+{
+	int unit = GC::Clear::N_BITS;
+	for (int i = 0; i < DIV_CEIL(instruction.get_n(), unit); i++)
+	{
+		auto& dest = processor.S[instruction.get_r(0) + i];
+		dest.resize_regs(min(unsigned(unit), instruction.get_n() - i * unit));
+		for (auto& reg : dest.get_regs())
+			reg.set(0);
+	}
 }
 
 template void YaoEvalWire::and_<false>(

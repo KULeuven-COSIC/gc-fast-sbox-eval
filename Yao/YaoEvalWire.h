@@ -10,6 +10,7 @@
 #include "BMR/Gate.h"
 #include "BMR/Register.h"
 #include "Processor/DummyProtocol.h"
+#include "Processor/Instruction.h"
 #include "config.h"
 #include "YaoWire.h"
 
@@ -19,6 +20,7 @@ class ProcessorBase;
 
 class YaoEvalWire : public YaoWire
 {
+    typedef GC::Secret<YaoEvalWire> whole_type;
 public:
 	typedef YaoEvaluator Party;
 	typedef YaoEvalInput Input;
@@ -60,6 +62,14 @@ public:
 	static void convcbit(Integer& dest, const GC::Clear& source,
 			GC::Processor<GC::Secret<YaoEvalWire>>&);
 
+	static void projs(GC::Processor<GC::Secret<YaoEvalWire>> &processor, const vector<int>& args);
+	static void projs_multithread(GC::Processor<GC::Secret<YaoEvalWire>> &processor, const vector<int>& args);
+	static void projs_singlethread(GC::Memory<GC::Secret<YaoEvalWire>> &S, const vector<int> &args, Key *gate, std::size_t start, std::size_t end, PRNG &prng, YaoEvaluator &evaluator, long counter);
+
+    static void convcbit2s(GC::Processor<whole_type>& processor,
+		const BaseInstruction& instruction);
+
+
 	void set(const Key& key);
 	void set(Key key, bool external);
 
@@ -77,11 +87,15 @@ public:
 	void public_input(bool value);
 	void op(const YaoEvalWire& left, const YaoEvalWire& right, Function func);
 	bool get_output();
+	uint8_t get_output(std::size_t n);
 
 	template<class T>
 	void my_input(T&, bool value, int n_bits);
 	template<class T>
 	void finalize_input(T& inputter, int from, int n_bits);
+	void XOR(const YaoEvalWire &x, const YaoEvalWire &y);
+	void XOR(const YaoEvalWire &x, bool y);
+	void XOR(int n, const YaoEvalWire &x, const GC::Clear &y);
 };
 
 #endif /* YAO_YAOEVALWIRE_H_ */

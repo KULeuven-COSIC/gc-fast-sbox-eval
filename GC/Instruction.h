@@ -89,6 +89,10 @@ enum
     // write to regint
     CONVCBIT = 0x230,
     CONVCBITVEC = 0x231,
+    // projection gates
+    PROJS = 0x24a,
+    REVEALN = 0x250,
+    XORMN = 0x24b,
 };
 
 #endif /* PROCESSOR_GC_INSTRUCTION_H_ */

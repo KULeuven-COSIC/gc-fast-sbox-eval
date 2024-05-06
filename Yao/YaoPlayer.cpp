@@ -58,6 +58,15 @@ YaoPlayer::YaoPlayer(int argc, const char** argv)
 			"-t", // Flag token.
 			"--threshold" // Flag token.
 	);
+	opt.add(
+			"0", // Default.
+			0, // Required?
+			1, // Number of args expected.
+			0, // Delimiter if expecting multiple args.
+			"Maximum number of threads to use. If 0, use maximum concurrency supported by hardware (default: 0).", // Help description.
+			"-c", // Flag token.
+			"--concurreny" // Flag token.
+	);
 	OnlineOptions online_opts(opt, argc, argv);
 	opt.parse(argc, argv);
 	opt.syntax = "./yao-player.x [OPTIONS] <progname>";
@@ -70,7 +79,7 @@ YaoPlayer::YaoPlayer(int argc, const char** argv)
 	}
 	else
 	{
-		throw exception();
+		// throw exception();
 		string usage;
 		opt.getUsage(usage);
 		cerr << usage;
@@ -81,17 +90,19 @@ YaoPlayer::YaoPlayer(int argc, const char** argv)
 	int pnb;
 	string hostname;
 	int threshold;
+	int n_threads;
 	opt.get("-p")->getInt(my_num);
 	opt.get("-pn")->getInt(pnb);
 	opt.get("-h")->getString(hostname);
 	bool continuous = not opt.get("-O")->isSet;
 	opt.get("-t")->getInt(threshold);
+	opt.get("-c")->getInt(n_threads);
 
 	GC::ThreadMasterBase* master;
 	if (my_num == 0)
-	    master = new YaoGarbleMaster(continuous, online_opts, threshold);
+	    master = new YaoGarbleMaster(continuous, online_opts, threshold, n_threads);
 	else
-	    master = new YaoEvalMaster(continuous, online_opts);
+	    master = new YaoEvalMaster(continuous, online_opts, n_threads);
 
 	server = Server::start_networking(master->N, my_num, 2, hostname, pnb);
 	master->run(progname);

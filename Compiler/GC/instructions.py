@@ -13,6 +13,7 @@ import Compiler.instructions as spdz
 import Compiler.tools as tools
 import collections
 import itertools
+import math
 
 class SecretBitsAF(base.RegisterArgFormat):
     reg_type = 'sb'
@@ -71,6 +72,9 @@ opcodes = dict(
     CONDPRINTSTRB = 0x224,
     CONVCBIT = 0x230,
     CONVCBITVEC = 0x231,
+    PROJS = 0x24a,
+    REVEALN = 0x250,
+    XORMN = 0x24b,
 )
 
 class BinaryVectorInstruction(base.Instruction):
@@ -618,3 +622,82 @@ class cond_print_strb(base.IOInstruction):
 
     def __init__(self, cond, val):
         super(cond_print_str, self).__init__(cond, self.str_to_int(val))
+
+class projs(base.VarArgsInstruction, base.Mergeable):
+    """
+    Apply a projection function to register value and store the result in another register.
+
+    :param: number of destination-source pairs to follow
+    :param: bit-length of destination register value (int)
+    :param: bit-length of source register value (int)
+    :param: truth table of the projection 4 rows are encoded per int (one per byte) (int)
+    :param: number of wires in register (int)   +
+    :param: destination (sbit)                  | repeat
+    :param: source (sbit)                       +
+    """
+    code = opcodes['PROJS']
+    is_vec = lambda self: True
+    def __init__(self, *args):
+        truth_table_size = 2**args[2]
+        n_ints = int(math.ceil(truth_table_size/4.))
+        self.arg_format = ['int', 'int', 'int'] + ['int'] * n_ints + ['int', 'sbw', 'sb'] * args[0]
+        self.truth_table = args[3:3+n_ints]
+        super(projs, self).__init__(*args)
+
+    def merge_id(self):
+        # mergeable if same input and output bit-length and same truth table
+        return (type(self), self.args[1], self.args[2]) + tuple(self.truth_table)
+    def merge(self, other):
+        assert self.truth_table == other.truth_table
+        self.args[0] += other.args[0]
+        self.args += other.args[3+len(self.truth_table):]
+        self.arg_format += ['int', 'sbw', 'sb'] * other.args[0]
+    def add_usage(self, req_node):
+        print(f'added usage {self.args[2]}, {self.args[1]}')
+        req_node.increment(('bit', f'truthtable {self.args[2]}-to-{self.args[1]}-bit'), sum(self.args[3+len(self.truth_table)::3]))
+
+
+class revealn(base.VarArgsInstruction, base.Mergeable):
+    """ Reveal secret n-bit register vectors and copy result to clear bit
+    register vectors.
+
+    :param: number of bits (int)
+    :param: number of wires per register
+    :param: destination (cbit)
+    :param: (repeat destination for each wire per register)...
+    :param: source (sbit)
+    :param: (repeat from number wires per register)...
+    """
+    is_vec = lambda self: True
+    code = opcodes['REVEALN']
+    def __init__(self, *args):
+        self.arg_format = ['int', 'int'] + ['cbw'] * args[1] + ['sb']
+        super(revealn, self).__init__(*args)
+    def merge_id(self):
+        return (type(self), self.args[0])
+    def merge(self, other):
+        assert self.args[0] == other.args[0]
+        self.args += other.args[1:]
+        self.arg_format += other.arg_format[1:]
+
+class xormn(base.VarArgsInstruction, base.Mergeable):
+    """ Bitwise XOR of n-bit secret and clear bit registers.
+
+    :param: number of bits (int)
+    :param: number of wires in sbit operand register
+    :param: result (sbit)
+    :param: operand (sbit)
+    :param: operand (cbit)
+    :param: (repeat from number of wires)
+    """
+    is_vec = lambda self: True
+    code = opcodes['XORMN']
+    def __init__(self, *args):
+        self.arg_format = ['int'] + ['int','sbw','sb','cb'] * int((len(args)-1)/4)
+        super(xormn, self).__init__(*args)
+    def merge_id(self):
+        return (type(self), self.args[0])
+    def merge(self, other):
+        assert self.args[0] == other.args[0]
+        self.args += other.args[1:]
+        self.arg_format += other.arg_format[1:]

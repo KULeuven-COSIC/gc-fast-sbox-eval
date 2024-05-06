@@ -23,6 +23,7 @@ using namespace std;
 #include "Tools/PointerVector.h"
 #include "Tools/Bundle.h"
 #include "Tools/SwitchableOutput.h"
+#include "Processor/Instruction.h"
 
 //#define PAD_TO_8(n) (n+8-n%8)
 #define PAD_TO_8(n) (n)
@@ -235,6 +236,12 @@ public:
 	static void ands(T& processor, const vector<int>& args) { processor.ands(args); }
 	template <class T>
 	static void xors(T& processor, const vector<int>& args) { processor.xors(args); }
+  template <class T>
+	static void xorm(T&, const vector<int>&) { throw not_implemented(); }
+  template <class T>
+	static void projs(T&, const vector<int>&) { throw not_implemented(); }
+  template <class T>
+	static void xormn(T&, const vector<int>&) { throw not_implemented(); }
 	template <class T>
 	static void inputb(T& processor, const vector<int>& args) { processor.input(args); }
 	template <class T>
@@ -284,6 +291,11 @@ public:
 	static void inputbvec(T& processor, ProcessorBase& input_processor,
 			const vector<int>& args);
 
+	template<class U>
+	static void convcbit2s(GC::Processor<U>&, const BaseInstruction&)
+	{ throw runtime_error("convcbit2s not implemented"); }
+
+
 	// most BMR phases don't need actual input
 	template<class T>
 	static T get_input(GC::Processor<T>& processor, const InputArgs& args)
@@ -293,6 +305,7 @@ public:
 	void other_input(Input&, int) {}
 
 	char get_output() { return 0; }
+  uint8_t get_output(std::size_t&) { throw not_implemented(); }
 
 	ProgramRegister(const Register& reg) : Register(reg) {}
 };
@@ -392,6 +405,7 @@ public:
 	void random();
 	void output();
 	unsigned long long get_output() { return Register::get_output(); }
+  uint8_t get_output(std::size_t&) { throw not_implemented(); }
 
 	template <class T>
 	static void store_clear_in_dynamic(GC::Memory<T>& mem,

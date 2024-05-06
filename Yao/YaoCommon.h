@@ -61,13 +61,14 @@ public:
         return counter + (thread_num << (64 - log_n_threads));
     }
 
-    int get_n_worker_threads()
+    int get_n_worker_threads() const
     {
-        return max(1u, thread::hardware_concurrency() / master.machine.nthreads);
+        auto max_threads = master.n_threads > 0 ? min(thread::hardware_concurrency(), (unsigned)master.n_threads) : thread::hardware_concurrency();
+        return max(1u, max_threads / master.machine.nthreads);
     }
 
     vector<array<size_t, 2>> get_splits(const vector<int>& args, int threshold,
-            int total);
+            int total, size_t offset, size_t skip);
 
     void wait(int n_threads)
     {

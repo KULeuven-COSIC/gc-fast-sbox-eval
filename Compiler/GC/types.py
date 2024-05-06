@@ -294,6 +294,7 @@ class sbits(bits):
     bitdec = inst.bitdecs
     bitcom = inst.bitcoms
     conv_regint = inst.convsint
+    single_wire_n = 1 # indicates if sbits(n) are represented as n-bit wire or n 1-bit wires
     @classmethod
     def conv_regint_by_bit(cls, n, res, other):
         tmp = cbits.get_type(n)()
@@ -304,11 +305,13 @@ class sbits(bits):
     def __init__(self, *args, **kwargs):
         bits.__init__(self, *args, **kwargs)
     @staticmethod
-    def new(value=None, n=None):
-        if n == 1:
+    def new(value=None, n=None, single_wire_n=1):
+        if n == 1 and single_wire_n == 1:
             return sbit(value)
         else:
-            return sbits.get_type(n)(value)
+            instance = sbits.get_type(n)(value)
+            instance.single_wire_n = single_wire_n
+            return instance
     @staticmethod
     def get_random_bit():
         res = sbit()
@@ -341,6 +344,7 @@ class sbits(bits):
         else:
             inst.stmsdi(self, cbits.conv(address))
     def load_int(self, value):
+        assert self.single_wire_n == 1
         if (abs(value) > (1 << self.n)):
             raise Exception('public value %d longer than %d bits' \
                             % (value, self.n))
@@ -353,6 +357,7 @@ class sbits(bits):
                 tmp[i].load_int((value >> (i * 64)) % 2**64)
             self.load_other(tmp)
     def load_other(self, other):
+        assert self.single_wire_n == 1
         if isinstance(other, cbits) and self.n == other.n:
             inst.convcbit2s(self.n, self, other)
         else:
@@ -364,14 +369,19 @@ class sbits(bits):
         else:
             if not isinstance(other, sbits):
                 other = self.conv(other)
+            assert self.single_wire_n == other.single_wire_n
             if self.n is None or other.n is None:
                 assert self.n == other.n
                 n = None
+            if self.single_wire_n > 1:
+                if self.n != other.n:
+                    raise CompilerError(f'Cannot have operands of different register sizes left: {self.n} right: {other.n}')
+                n = self.n
             else:
                 n = min(self.n, other.n)
-            res = self.new(n=n)
+            res = self.new(n=n,single_wire_n=self.single_wire_n)
             inst.xors(n, res, self, other)
-            if self.n != None and max(self.n, other.n) > n:
+            if (self.single_wire_n == 1) and self.n != None and max(self.n, other.n) > n:
                 if self.n > n:
                     longer = self
                 else:
@@ -385,12 +395,14 @@ class sbits(bits):
     __rxor__ = __add__
     @read_mem_value
     def __rsub__(self, other):
+        assert self.single_wire_n == 1
         if isinstance(other, cbits):
             return other + self
         else:
             return self.xor_int(other)
     @read_mem_value
     def __mul__(self, other):
+        assert self.single_wire_n == 1
         if isinstance(other, int):
             return self.mul_int(other)
         try:
@@ -406,6 +418,7 @@ class sbits(bits):
     __rmul__ = __mul__
     @read_mem_value
     def __and__(self, other):
+        assert self.single_wire_n == 1
         if util.is_zero(other):
             return 0
         elif util.is_all_ones(other, self.n) or \
@@ -426,6 +439,13 @@ class sbits(bits):
             return self
         elif other == self.long_one():
             return ~self
+        if self.single_wire_n > 1:
+            if util.int_len(other) > self.single_wire_n:
+                raise CompilerError(f'Constant {other} is too large for representation in {self.single_wire_n} bit')
+            res = self.new(n=self.n, single_wire_n=self.single_wire_n)
+            const = cbits.get_type(self.single_wire_n).conv(other)
+            inst.xormn(self.single_wire_n, self.n, res, self, const)
+            return res
         self_bits = self.bit_decompose()
         other_bits = util.bit_decompose(other, max(self.n, util.int_len(other)))
         extra_bits = [self.new(b, n=1) for b in other_bits[self.n:]]
@@ -433,6 +453,7 @@ class sbits(bits):
                                  for x,y in zip(self_bits, other_bits)] \
                                 + extra_bits)
     def mul_int(self, other):
+        assert self.single_wire_n == 1
         assert(util.is_constant(other))
         if other == 0:
             return 0
@@ -449,8 +470,11 @@ class sbits(bits):
     def __lshift__(self, i):
         return self.bit_compose([sbit(0)] * i + self.bit_decompose()[:self.max_length-i])
     def __invert__(self):
-        res = type(self)(n=self.n)
-        inst.nots(self.n, res, self)
+        res = sbits.new(n=self.n, single_wire_n=self.single_wire_n)
+        if self.single_wire_n > 1:
+            inst.xormn(self.single_wire_n, self.n, res, self, cbits.get_type(self.single_wire_n).conv(2**self.single_wire_n - 1))
+        else:
+            inst.nots(self.n, res, self)
         return res
     def __neg__(self):
         return self
@@ -458,8 +482,13 @@ class sbits(bits):
         if self.n == None or \
            self.n > max(self.max_length, self.clear_type.max_length):
             assert(self.unit == self.clear_type.unit)
-        res = self.clear_type.get_type(self.n)()
-        inst.reveal(self.n, res, self)
+        if self.single_wire_n > 1:
+            clear_type = self.clear_type.get_type(self.single_wire_n)
+            res = [clear_type() for i in range(self.n)]
+            inst.revealn(self.single_wire_n, self.n, *res, self)
+        else:
+            res = self.clear_type.get_type(self.n)()
+            inst.reveal(self.n, res, self)
         return res
     def equal(self, other, n=None):
         bits = (~(self + other)).bit_decompose()
@@ -510,6 +539,7 @@ class sbits(bits):
 
         This will output 1.
         """
+        assert self.single_wire_n == 1
         return result_conv(x, y)(self & (x ^ y) ^ y)
     @staticmethod
     def bit_adder(*args, **kwargs):
@@ -523,6 +553,40 @@ class sbits(bits):
         bits = sbitvec.from_vec(sbitvec([self]).v[:n_bits]).elements()[0]
         bits = sint(bits, size=n_bits)
         return sint.bit_compose(bits)
+    def proj(self, truth_table, output_size):
+        ttn = len(truth_table)
+        if ttn != 2**self.single_wire_n:
+            raise CompilerError(f'Incorrect number of rows in the truth_table. Expected {2**self.single_wire_n}, got {ttn}')
+        if output_size < 0:
+            raise CompilerError('Invalid output size')
+        if output_size > 8:
+            raise CompilerError('Output size > 8 not yet supported')
+        tt = [(truth_table[4*i+0] & 0xff) | ((truth_table[4*i+1] & 0xff) << 8) | ((truth_table[4*i+2] & 0xff) << 16) | ((truth_table[4*i+3] & 0xff) << 24) for i in range(int(ttn/4))]
+        if ttn % 4 != 0:
+            tt.append(0)
+            for k,i in enumerate(range(ttn- (ttn % 4), ttn)):
+                tt[-1] |= (truth_table[i] & 0xff) << 8*k
+        res = sbits.new(None, n=self.n, single_wire_n=output_size)
+        inst.projs(1, output_size, self.single_wire_n, *tt, self.n, res, self)
+        return res
+    def long_one(self):
+        n = self.single_wire_n if self.single_wire_n > 1 else self.n
+        return 2**n - 1 if n != None else None
+    @classmethod
+    def bit_compose(cls, bits):
+        if len(bits) > 0:
+            single_wire_n = bits[0].single_wire_n
+            assert all((b.single_wire_n == single_wire_n for b in bits))
+        res = super(sbits, cls).bit_compose(bits)
+        if len(bits) > 0:
+            res.single_wire_n = single_wire_n
+        return res
+    def bit_decompose(self, bit_length=None):
+        single_wire_n = self.single_wire_n
+        res = super().bit_decompose(bit_length)
+        for r in res:
+            r.single_wire_n = single_wire_n
+        return res
 
 class sbitvec(_vec):
     """ Vector of registers of secret bits, effectively a matrix of secret bits.

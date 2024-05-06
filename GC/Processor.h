@@ -62,6 +62,7 @@ public:
 
     void bitcoms(T& x, const vector<int>& regs) { x.bitcom(S, regs); }
     void bitdecs(const vector<int>& regs, const T& x) { x.bitdec(S, regs); }
+
     void bitdecc(const vector<int>& regs, const Clear& x);
     void bitdecint(const vector<int>& regs, const Integer& x);
 
@@ -83,6 +84,10 @@ public:
             Integer dest_address, Integer source_address);
 
     void xors(const vector<int>& args);
+    // xor with clear bit register
+    void xorm(const vector<int>& args);
+    // xor with clear n-bit registers
+    void xormn(const vector<int>& args);
     void xors(const vector<int>& args, size_t start, size_t end);
     void nots(const ::BaseInstruction& instruction);
     void andm(const ::BaseInstruction& instruction);
@@ -97,6 +102,12 @@ public:
             const vector<int>& args, int my_num);
 
     void reveal(const vector<int>& args);
+    // reveal n-bit wire value
+    void revealn(const vector<int>& args);
+
+    template<int = 0>
+    void convcbit2s(const BaseInstruction& instruction);
+
 
     void print_reg(int reg, int n, int size);
     void print_reg_plain(Clear& value);

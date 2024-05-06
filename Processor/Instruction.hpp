@@ -454,6 +454,9 @@ void BaseInstruction::parse_operands(istream& s, int pos, int file_pos)
       case INPUTB:
       case INPUTBVEC:
       case REVEAL:
+      case REVEALN:
+      case XORMN:
+      case PROJS:
         get_vector(get_int(s), start, s);
         break;
       case PRINTREGSIGNED:
@@ -724,10 +727,48 @@ unsigned BaseInstruction::get_max_reg(int reg_type) const
       offset = 1;
       size_offset = -1;
       break;
+  case REVEALN:
+  {
+    unsigned size = 1; // we never reveal more than a 8 bit wire (projection gates don't support more bits)
+    unsigned m = 0;
+    for(unsigned i=1; i<start.size(); ) {
+      int n = start[i];
+      for(int j=0; j<n; j++)
+        m = max(m, (unsigned)start[i+j+1]+size);
+      i += n+2;
+    }
+
+    return m;
+  }
   case SPLIT:
       size = DIV_CEIL(this->size, 64);
       skip = 1;
       break;
+  case PROJS:
+  {
+      offset = 3 + DIV_CEIL(1 << start[2], 4);
+      skip = 3;
+      unsigned m = 0;
+      for (size_t i = offset; i < start.size(); i += skip)
+      {
+          size = DIV_CEIL(start[i], 64);
+          m = max(m, (unsigned)start[i+1] + size);
+      }
+      return m;
+  }
+  case XORMN:
+  {
+    offset = 1;
+    skip = 4;
+    unsigned m = 0;
+    for (size_t i = offset; i < start.size(); i += skip)
+    {
+        size = DIV_CEIL(start[i], 64);
+        m = max(m, (unsigned)start[i+1] + size);
+    }
+    return m;
+  }
+
   }
 
   if (skip > 0)

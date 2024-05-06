@@ -109,15 +109,19 @@ void BaseMachine::time()
 
 void BaseMachine::start(int n)
 {
+  #ifdef VERBOSE_TIMERS
   cout << "Starting timer " << n << " at " << timer[n].elapsed()
     << " after " << timer[n].idle() << endl;
+  #endif
   timer[n].start();
 }
 
 void BaseMachine::stop(int n)
 {
   timer[n].stop();
+  #ifdef VERBOSE_TIMERS
   cout << "Stopped timer " << n << " at " << timer[n].elapsed() << endl;
+  #endif
 }
 
 void BaseMachine::print_timers()

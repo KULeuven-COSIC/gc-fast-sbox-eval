@@ -27,6 +27,7 @@ Machine<T>::Machine()
 template<class T>
 Machine<T>::~Machine()
 {
+  print_timers();
 #ifdef VERBOSE
     for (auto it = timer.begin(); it != timer.end(); it++)
         cerr << T::phase_name() << " timer " << it->first << " at end: "

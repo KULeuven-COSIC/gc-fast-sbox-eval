@@ -49,9 +49,11 @@ public:
 
     OnlineOptions& opts;
 
+    int n_threads;
+
     static ThreadMaster<T>& s();
 
-    ThreadMaster(OnlineOptions& opts);
+    ThreadMaster(OnlineOptions& opts, int n_threads);
     virtual ~ThreadMaster() {}
 
     void run_tape(int thread_number, int tape_number, int arg);

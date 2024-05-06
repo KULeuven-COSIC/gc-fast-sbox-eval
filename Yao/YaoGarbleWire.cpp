@@ -15,6 +15,8 @@
 #include "GC/ShareSecret.hpp"
 #include "YaoCommon.hpp"
 
+#include "YaoProjGate.h"
+
 void YaoGarbleWire::random()
 {
 	if (YaoGarbler::s().prng.get_bit())
@@ -56,7 +58,7 @@ void YaoGarbleWire::and_multithread(GC::Processor<GC::Secret<YaoGarbleWire> >& p
 	SendBuffer& gates = party.gates;
 	gates.allocate(total * sizeof(YaoGate));
 	int i_thread = 0, start = 0;
-	for (auto& x : party.get_splits(args, party.get_threshold(), total))
+	for (auto& x : party.get_splits(args, party.get_threshold(), total, 0, 4))
 	{
 		int i_gate = x[0];
 		int end = x[1];
@@ -194,6 +196,12 @@ char YaoGarbleWire::get_output()
 	return 0;
 }
 
+uint8_t YaoGarbleWire::get_output(std::size_t n) {
+	YaoGarbler::s().taint();
+	YaoGarbler::s().output_masks.push_back(key_.get_signal(n));
+	return 0;
+}
+
 void YaoGarbleWire::convcbit(Integer& dest, const GC::Clear& source,
 		GC::Processor<GC::Secret<YaoGarbleWire>>&)
 {
@@ -201,4 +209,99 @@ void YaoGarbleWire::convcbit(Integer& dest, const GC::Clear& source,
 	auto& garbler = YaoGarbler::s();
 	garbler.untaint();
 	dest = garbler.P->receive_long(1);
+}
+
+void YaoGarbleWire::projs(GC::Processor<GC::Secret<YaoGarbleWire>> &processor, const vector<int>& args) {
+	projs_multithread(processor, args);
+}
+
+void YaoGarbleWire::projs_singlethread(GC::Memory<GC::Secret<YaoGarbleWire>> &S, const vector<int>& args, Key *gate_ptr, std::size_t start, std::size_t end, PRNG &prng, YaoGarbler &garbler, long counter) {
+	std::size_t source_size = args[2];
+	auto& in_deltas = garbler.get_deltas(source_size);
+	auto& out_deltas = garbler.get_deltas(args[1]);
+	int dl = GC::Secret<YaoGarbleWire>::default_length;
+	for(std::size_t i=start; i < end; i+=3) {
+		int n = args[i];
+		// if n > the default register size, e.g. 64, the operation uses n_units registers of size 64
+		int n_units = DIV_CEIL(n, dl);
+		for(int k=0; k < n_units; k++) {
+			auto &dest = S[args[i+1]+k];
+			auto &src = S[args[i+2]+k];
+			int nk = min(dl, n - k*dl);
+			dest.resize_regs(nk);
+			for(int j=0; j<nk; j++) {
+				YaoGarbleWire &dest_wire = dest.get_reg(j);
+				const YaoGarbleWire &src_wire = src.get_reg(j);
+				YaoProjGate gate(source_size, gate_ptr);
+				gate.garble(prng, garbler.mmo, dest_wire, src_wire, args, 3, in_deltas, out_deltas, counter);
+				gate_ptr += gate.garbled_table_size();
+				counter++;
+			}
+		}
+
+	}
+}
+
+void YaoGarbleWire::projs_multithread(GC::Processor<GC::Secret<YaoGarbleWire>> &processor, const vector<int>& args) {
+	YaoGarbler& party = YaoGarbler::s();
+	int source_size = args[2];
+	SendBuffer& gates = party.gates;
+	std::size_t proj_size = YaoProjGate::sizeof_table(source_size);
+	int tt_len = DIV_CEIL(1 << source_size, 4);
+	int total = count_proj_args(args, 3+tt_len);
+	gates.allocate(total * proj_size);
+	if (total < (party.get_threshold() >> (std::max(0, (int)(source_size) - 2))))
+	{
+		// run in single thread
+		Key *gate_ptr = (Key*) gates.end();
+		projs_singlethread(processor.S, args, gate_ptr, 3+tt_len, args.size(), party.prng, party, party.get_gate_id());
+		gates.skip(total * proj_size);
+		party.counter += total;
+		return;
+	}
+
+	processor.complexity += total;
+	int i_thread = 0;
+	size_t start = 3+tt_len;
+	for (auto& x : party.get_splits(args, party.get_threshold(), total, 3+tt_len, 3))
+	{
+		size_t n_gates = x[0];
+		size_t end = x[1];
+		Key *gate = (Key*)gates.end();
+		gates.skip(n_gates * proj_size);
+		party.timers["Dispatch"].start();
+		party.jobs[i_thread++]->dispatch(processor, args, start, end, source_size, gate, party.get_gate_id());
+		party.timers["Dispatch"].stop();
+		party.counter += n_gates;
+		start = end;
+	}
+	party.wait(i_thread);
+}
+
+void YaoGarbleWire::XOR(const YaoGarbleWire &x, const YaoGarbleWire &y) {
+	set_full_key(x.full_key() ^ y.full_key());
+}
+
+void YaoGarbleWire::XOR(const YaoGarbleWire &x, bool y) {
+	set_full_key(y ? x.full_key() ^ YaoGarbler::s().get_delta() : x.full_key() );
+}
+
+void YaoGarbleWire::XOR(int n, const YaoGarbleWire &x, const GC::Clear &y) {
+	assert(y.get() <= 0xff);
+	set_full_key(x.full_key() ^ Key::prod(y.get(), YaoGarbler::s().get_deltas(n)));
+}
+
+void YaoGarbleWire::convcbit2s(GC::Processor<whole_type>& processor,
+		const BaseInstruction& instruction)
+{
+	int unit = GC::Clear::N_BITS;
+	for (int i = 0; i < DIV_CEIL(instruction.get_n(), unit); i++)
+	{
+		auto& dest = processor.S[instruction.get_r(0) + i];
+		int n = min(unsigned(unit), instruction.get_n() - i * unit);
+		dest.resize_regs(n);
+		for (int j = 0; j < n; j++)
+			dest.get_reg(i).public_input(
+					processor.C[instruction.get_r(1) + i].get_bit(j));
+	}
 }

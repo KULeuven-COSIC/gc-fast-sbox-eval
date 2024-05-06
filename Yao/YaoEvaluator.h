@@ -13,6 +13,7 @@
 #include "GC/Thread.h"
 #include "Tools/MMO.h"
 #include "OT/OTExtensionWithMatrix.h"
+#include "YaoProjGate.h"
 
 class YaoEvaluator: public GC::Thread<GC::Secret<YaoEvalWire>>,
 		public YaoCommon<YaoEvalWire>

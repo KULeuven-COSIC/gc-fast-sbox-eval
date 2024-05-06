@@ -46,4 +46,15 @@ void YaoWire::xors(GC::Processor<T>& processor, const vector<int>& args,
 	processor.xors(args, start, end);
 }
 
+template<class T>
+void YaoWire::xorm(GC::Processor<T>& processor, const vector<int>& args) {
+	processor.xorm(args);
+}
+
+template<class T>
+void YaoWire::xormn(GC::Processor<T>& processor, const vector<int>& args)
+{
+	processor.xormn(args);
+}
+
 #endif /* YAO_YAOWIRE_HPP_ */

@@ -13,6 +13,7 @@ enum YaoJobType
 {
 	YAO_AND_JOB,
 	YAO_XOR_JOB,
+	YAO_PROJ_JOB,
 	YAO_NO_JOB
 };
 
@@ -65,6 +66,22 @@ public:
 		worker.request(*this);
 	}
 
+	void dispatch(GC::Processor<GC::Secret<T> >& processor, const vector<int>& args,
+	size_t start, size_t end, size_t source_size,
+	Key* gate, long counter)
+	{
+		this->type = YAO_PROJ_JOB;
+		this->processor = &processor;
+		this->args = &args;
+		this->start = start;
+		this->end = end;
+		this->n_gates = source_size;
+		this->gate = (YaoGate*)gate; // this is ugly, sorry :(
+		this->counter = counter;
+		this->repeat = false;
+		worker.request(*this);
+	}
+
 	int run()
 	{
 		switch(type)
@@ -76,6 +93,11 @@ public:
 		case YAO_XOR_JOB:
 			T::xors(*processor, *args, start, end);
 			break;
+		case YAO_PROJ_JOB: {
+			Key *gate = (Key*)this->gate;
+			T::projs_singlethread(processor->S, *args, gate, start, end, prng, party, counter);
+			break;
+		}
 		default:
 			throw runtime_error("job not specified: " + to_string(type));
 		}

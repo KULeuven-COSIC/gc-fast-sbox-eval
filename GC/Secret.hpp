@@ -291,6 +291,14 @@ void Secret<T>::reveal(size_t n_bits, U& x)
 #endif
 }
 
+template <class T>
+template <class U>
+void Secret<T>::revealn(size_t bitlength, size_t i, U& x) {
+  get_reg(i).output();
+  uint8_t out = get_reg(i).get_output(bitlength);
+  x = U(out);
+}
+
 } /* namespace GC */
 
 #endif

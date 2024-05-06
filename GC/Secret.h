@@ -37,6 +37,16 @@ inline void XOR(T& res, const T& left, const T& right)
     res.XOR(left, right);
 }
 
+template <class T>
+inline void XOR(T& res, const T& x, bool y) {
+  res.XOR(x, y);
+}
+
+template <class T>
+inline void XOR(int n, T& res, const T& x, const Clear &y) {
+  res.XOR(n, x, y);
+}
+
 template<class T> class Processor;
 template<class T> class Machine;
 
@@ -99,6 +109,12 @@ public:
     static void xors(Processor<U>& processor, const vector<int>& args)
     { T::xors(processor, args); }
     template<class U>
+    static void xorm(Processor<U>& processor, const vector<int>& args)
+    { T::xorm(processor, args); }
+    template<class U>
+    static void xormn(Processor<U>& processor, const vector<int>& args)
+    { T::xormn(processor, args); }
+    template<class U>
     static void inputb(Processor<U>& processor, const vector<int>& args)
     { T::inputb(processor, args); }
     template<class U>
@@ -114,12 +130,24 @@ public:
     { processor.reveal(args); }
 
     template<class U>
+    static void revealn_inst(Processor<U>& processor, const vector<int>& args)
+    { processor.revealn(args); }
+
+    template<class U>
     static void trans(Processor<U>& processor, int n_inputs, const vector<int>& args);
 
     template<class U>
     static void convcbit(Integer& dest, const Clear& source,
             Processor<U>& proc)
     { T::convcbit(dest, source, proc); }
+
+    template<class U>
+    static void convcbit2s(Processor<U>& processor, const BaseInstruction& instruction)
+    { T::convcbit2s(processor, instruction); }
+
+    template<class U>
+    static void projs(Processor<U> &processor, const vector<int>& args)
+    { T::projs(processor, args); }
 
     Secret();
     Secret(const Integer& x) { *this = x; }
@@ -144,12 +172,25 @@ public:
         for (int i = 0; i < n; i++)
             XOR<T>(registers[i], x.get_reg(i), y.get_reg(i));
     }
+    void xor_(int n, const Secret<T> &x, const Clear &y) {
+      resize_regs(n);
+      for (int i=0; i<n; i++) {
+        XOR<T>(get_reg(i), x.get_reg(i), (y >> i) & 0x1);
+      }
+    }
+    void xorn_(int n, int bitlength, const Secret<T> &x, const Clear &y) {
+      resize_regs(n);
+      for (int i = 0; i < n; i++)
+        XOR<T>(bitlength, registers[i], x.get_reg(i), y);
+    }
     void invert(int n, const Secret<T>& x);
     void and_(int n, const Secret<T>& x, const Secret<T>& y, bool repeat);
     void andrs(int n, const Secret<T>& x, const Secret<T>& y) { and_(n, x, y, true); }
 
     template <class U>
     void reveal(size_t n_bits, U& x);
+    template <class U>
+    void revealn(size_t bitlength, size_t i, U& x);
 
     template <class U>
     void my_input(U& inputter, BitVec value, int n_bits);

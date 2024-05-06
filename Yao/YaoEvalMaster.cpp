@@ -15,8 +15,8 @@
 #include "Processor/Instruction.hpp"
 #include "YaoWire.hpp"
 
-YaoEvalMaster::YaoEvalMaster(bool continuous, OnlineOptions& opts) :
-        ThreadMaster<GC::Secret<YaoEvalWire>>(opts), continuous(continuous)
+YaoEvalMaster::YaoEvalMaster(bool continuous, OnlineOptions& opts, int n_threads) :
+        ThreadMaster<GC::Secret<YaoEvalWire>>(opts, n_threads), continuous(continuous)
 {
 }
 

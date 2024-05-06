@@ -229,6 +229,30 @@ void Processor<T>::xors(const vector<int>& args, size_t start, size_t end)
     }
 }
 
+template <class T>
+void Processor<T>::xorm(const std::vector<int> &args) {
+	assert(args.size() == 4);
+	S[args[1]].xor_(args[0], S[args[2]], C[args[3]]);
+}
+
+template <class T>
+void Processor<T>::xormn(const std::vector<int> &args) {
+	int bitlength = args[0];
+	int dl = T::default_length;
+	for(size_t i=1; i<args.size(); i += 4) {
+		int n = args[i];
+		if(n <= dl) {
+			S[args[i+1]].xorn_(n, bitlength, S[args[i+2]], C[args[i+3]]);
+		}else{
+			int n_units = DIV_CEIL(n, dl);
+			for(int j=0; j < n_units; j++) {
+				S[args[i+1]+j].xorn_(min(dl, n-j*dl), bitlength, S[args[i+2]+j], C[args[i+3]]);
+			}
+		}
+
+	}
+}
+
 template<class T>
 void Processor<T>::nots(const ::BaseInstruction& instruction)
 {
@@ -291,6 +315,42 @@ void Processor<T>::reveal(const vector<int>& args)
             S[r1 + i].reveal(min(Clear::N_BITS, n - i * Clear::N_BITS),
                     C[r0 + i]);
     }
+}
+
+template <class T>
+void Processor<T>::revealn(const vector<int>& args)
+{
+    int bitlength = args[0];
+    if (bitlength > max(T::default_length, Clear::N_BITS))
+        assert(T::default_length == Clear::N_BITS);
+    int dl = T::default_length;
+    for (size_t j = 1; j < args.size(); ) {
+        int n = args[j];
+        int n_units = DIV_CEIL(n, dl);
+        int src = args[j + 1 + n];
+        int creg = 0;
+        for(int k = 0; k<n_units; k++) {
+            int nk = min(dl, n - k*dl);
+            for(int i = 0; i < nk; i++) {
+                S[src+k].revealn(bitlength, i, C[args[j+1+creg]]);
+                creg++;
+            }
+
+        }
+        j += n+2;
+    }
+}
+
+template <class T>
+template <int>
+void Processor<T>::convcbit2s(const BaseInstruction& instruction)
+{
+    int unit = GC::Clear::N_BITS;
+    auto& share_thread = ShareThread<T>::s();
+    for (int i = 0; i < DIV_CEIL(instruction.get_n(), unit); i++)
+        S[instruction.get_r(0) + i] = T::constant(C[instruction.get_r(1) + i],
+                share_thread.P->my_num(), share_thread.MC->get_alphai(),
+                min(unsigned(unit), instruction.get_n() - i * unit));
 }
 
 template <class T>
