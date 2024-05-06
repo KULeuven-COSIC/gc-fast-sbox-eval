@@ -1,3 +1,72 @@
+This is a fork of [MP-SPDZ](https://github.com/data61/MP-SPDZ), forked at v0.2.7 ([08388f9](https://github.com/data61/MP-SPDZ/commit/08388f9ab9d6e15d737f3a49d25c2465e4a717a5)).
+
+# Changes
+Support for projection gates and _n_-bit wires for Yao's Garbled Circuits.
+
+- `sbits` type now has a method `sbits.proj` to express a projection gate.
+- New virtual machine instructions `PROJS (0x24a)`, `REVEALN (0x250)` and `XORMN (0x24b)`
+- The `yao-party.x` virtual machine supports the new instructions
+
+MPC programs
+
+- `Programs/Source/aes_proj.mpc`: AES implementation using projection gates
+- `Programs/Source/skinny.mpc`: Implementation of the [SKINNY](https://eprint.iacr.org/2016/660) cipher for binary circuits
+- `Programs/Source/skinny_n_proj.mpc`: Implementation of SKINNY using projection gates
+
+The changes are licensed under the MIT license (see [License.txt](License.txt) for more details).
+
+# Garbling Scheme Benchmark
+To run the benchmark, first install MP-SPDZ requirements (`apt-get install automake cmake build-essential git libboost-dev libboost-thread-dev libntl-dev libsodium-dev libssl-dev libtool m4 python3 texinfo yasm`, for more info see below), then
+
+1. Compile MOTION (you need `C++20` build tools, e.g., `g++-10, libstdc++-10-dev`): `cd MOTION && mkdir build && cd build && cmake -DMOTION_BUILD_EXE=On .. && make -j4 bristol-evaluator`
+2. Go back: `cd ../..`
+3. Compile MP-SPDZ `echo "USE_GF2N_LONG = 0" >> CONFIG.mine && make -j4 mpir && make -j4 yao`
+4. Pull circuits `git submodule update --init Programs/Circuits`
+
+The benchmark is managed via the script `garbling-benchmark.py`. Calling `python garbling-benchmark.py --help` yields usage information.
+
+```
+usage: garbling-benchmark.py [-h] [--simd SIMD] [--iters ITERS] [--zre15]
+                             [--rr21] [--proj] [--csv CSV]
+                             circuit [circuit ...]
+
+positional arguments:
+  circuit        The circuits to execute, options are ['all', 'skinny64_64',
+                 'skinny64_128', 'skinny64_192', 'skinny128_128',
+                 'skinny128_256', 'skinny128_384', 'mantis7', 'twine80',
+                 'twine128', 'aes128']
+
+options:
+  -h, --help     show this help message and exit
+  --simd SIMD    The number of SIMD, i.e., parallel invocations of the circuit
+  --iters ITERS  The number of repetitions
+  --zre15        Use ZRE15 garbling scheme (HalfGates)
+  --rr21         Use RR21 garbling scheme (ThreeHalves)
+  --proj         Use projection gates garbling scheme
+  --csv CSV      Generate a csv file with the data.
+```
+The benchmarks for the paper were run by
+
+- `python garbling-benchmark.py --simd 1000 --iters 10 --zre15 --rr21 --proj --csv "garbling-benchmark-simd1000.csv" skinny64_64 skinny64_128 skinny64_192 mantis7 twine80 twine128 aes128`
+- `python garbling-benchmark.py --simd 500 --iters 10 --zre15 --rr21 --proj --csv "garbling-benchmark-simd500.csv" skinny128_128 skinny128_256 skinny128_384`
+
+which runs the benchmark of all three garbling schemes and saves the resulting garbling time, evaluation time and circuit size in two csv files. The script stores the raw benchmark log files in directories named `benchmark-<time>-<protocol>`. For the uploaded benchmark results, these folders have been renamed to `benchmark-simd<SIMD>-<protocol>`.
+
+The options `--zre15` and `--proj` run the HalfGates and projection gates garbling scheme respectively, both implemented in MP-SPDZ. The option `--rr21` runs the ThreeHalves garbling scheme implemented in the [MOTION](https://github.com/encryptogroup/MOTION) framework with Bristol-Fashion circuit files of the same primitive.
+The circuit files are `mantis7`, `skinny64_64.txt`, `skinny64_128.txt`, `skinny64_192.txt`, `skinny128_128.txt`, `skinny128_256.txt`, `skinny128_384.txt`, `twine80.txt` and `twine128.txt`.
+
+The raw benchmark data can be found in the directories `benchmark-simd$SIMD-$SCHEME` (with `$SIMD=500, 1000` and `$SCHEME=proj, zre15, rr21` in the form of raw log files that contain all measured data.
+The parsed data is contained in `garbling-benchmark-simd500.csv` and `garbling-benchmark-1000.csv` as csv table.
+
+| Circuit | Protocol | Iterations | SIMD | Garbling time [ms] | Garbling time std | Eval time [ms] | Eval time std | Circuit Size [MB] | Circuit Size std |
+|---------|----------|------------|------|--------------------|-------------------|----------------|---------------|-------------------|------------------|
+
+## MOTION circuit files
+
+The circuit files in the Bristol Fashion format for the primitives SKINNY, MANTIS and TWINE were created using `a2bristol.py` which is an **experimental**
+transpiler script from MP-SPDZ (human readable) bytecode to the Bristol Fashion format. More information and how to prepare a `.mpc` file for transpiling
+can be obtained by running `python a2bristol.py -h`.
+
 # Multi-Protocol SPDZ [![Documentation Status](https://readthedocs.org/projects/mp-spdz/badge/?version=latest)](https://mp-spdz.readthedocs.io/en/latest/?badge=latest) [![Build Status](https://dev.azure.com/data61/MP-SPDZ/_apis/build/status/data61.MP-SPDZ?branchName=master)](https://dev.azure.com/data61/MP-SPDZ/_build/latest?definitionId=7&branchName=master) [![Gitter](https://badges.gitter.im/MP-SPDZ/community.svg)](https://gitter.im/MP-SPDZ/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 Software to benchmark various secure multi-party computation (MPC)

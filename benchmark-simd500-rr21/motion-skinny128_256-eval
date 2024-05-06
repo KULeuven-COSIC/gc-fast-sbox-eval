@@ -1,0 +1,31 @@
+===========================================================================
+Circuit skinny128_256.txt with 500 SIMD values
+===========================================================================
+MOTION version: 17a73116-dirty @ main
+invocation: MOTION/build/bin/bristol-evaluator --my-id 1 --parties 0,127.0.0.1,23000 1,127.0.0.1,23001 --num-simd 500 --repetitions 10 --online-after-setup 1 --circuit skinny128_256.txt
+by erik@rechner, PID 27501
+===========================================================================
+Run time statistics over 10 iterations
+---------------------------------------------------------------------------
+                          mean        median        stddev
+---------------------------------------------------------------------------
+MT Presetup              0.000 ms      0.000 ms      0.000 ms
+MT Setup                 0.000 ms      0.000 ms      0.000 ms
+SP Presetup              0.000 ms      0.000 ms      0.000 ms
+SP Setup                 0.000 ms      0.000 ms      0.000 ms
+SB Presetup              0.000 ms      0.000 ms      0.000 ms
+SB Setup                 0.000 ms      0.000 ms      0.000 ms
+Base OTs                 0.000 ms      0.000 ms      0.000 ms
+OT Extension Setup      19.626 ms     15.879 ms      5.424 ms
+KK13 OT Extension Setup      0.000 ms      0.000 ms      0.000 ms
+---------------------------------------------------------------------------
+Preprocessing Total    132.142 ms    137.064 ms     16.589 ms
+Gates Setup            229.175 ms    203.865 ms     51.356 ms
+Gates Online           173.954 ms    174.057 ms     14.153 ms
+---------------------------------------------------------------------------
+Circuit Evaluation     537.912 ms    512.542 ms     64.709 ms
+===========================================================================
+Communication with each other party:
+Sent: 2.003 MiB in 390 messages
+Received: 77.357 MiB in 6408 messages
+===========================================================================

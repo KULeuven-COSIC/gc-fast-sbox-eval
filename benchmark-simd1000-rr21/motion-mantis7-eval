@@ -1,0 +1,31 @@
+===========================================================================
+Circuit mantis7.txt with 1000 SIMD values
+===========================================================================
+MOTION version: 17a73116-dirty @ main
+invocation: MOTION/build/bin/bristol-evaluator --my-id 1 --parties 0,127.0.0.1,23000 1,127.0.0.1,23001 --num-simd 1000 --repetitions 10 --online-after-setup 1 --circuit mantis7.txt
+by erik@rechner, PID 21810
+===========================================================================
+Run time statistics over 10 iterations
+---------------------------------------------------------------------------
+                          mean        median        stddev
+---------------------------------------------------------------------------
+MT Presetup              0.000 ms      0.000 ms      0.000 ms
+MT Setup                 0.000 ms      0.000 ms      0.000 ms
+SP Presetup              0.000 ms      0.000 ms      0.000 ms
+SP Setup                 0.000 ms      0.000 ms      0.000 ms
+SB Presetup              0.000 ms      0.000 ms      0.000 ms
+SB Setup                 0.000 ms      0.000 ms      0.000 ms
+Base OTs                 0.000 ms      0.000 ms      0.000 ms
+OT Extension Setup      26.959 ms     29.381 ms      7.601 ms
+KK13 OT Extension Setup      0.000 ms      0.000 ms      0.000 ms
+---------------------------------------------------------------------------
+Preprocessing Total    151.491 ms    142.512 ms     31.685 ms
+Gates Setup             86.771 ms     83.964 ms     15.177 ms
+Gates Online            76.847 ms     66.433 ms     23.611 ms
+---------------------------------------------------------------------------
+Circuit Evaluation     318.259 ms    323.867 ms     49.282 ms
+===========================================================================
+Communication with each other party:
+Sent: 2.987 MiB in 390 messages
+Received: 30.962 MiB in 1288 messages
+===========================================================================

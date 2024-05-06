@@ -1,0 +1,31 @@
+===========================================================================
+Circuit twine80.txt with 1000 SIMD values
+===========================================================================
+MOTION version: 17a73116-dirty @ main
+invocation: MOTION/build/bin/bristol-evaluator --my-id 1 --parties 0,127.0.0.1,23000 1,127.0.0.1,23001 --num-simd 1000 --repetitions 10 --online-after-setup 1 --circuit twine80.txt
+by erik@rechner, PID 22526
+===========================================================================
+Run time statistics over 10 iterations
+---------------------------------------------------------------------------
+                          mean        median        stddev
+---------------------------------------------------------------------------
+MT Presetup              0.000 ms      0.000 ms      0.000 ms
+MT Setup                 0.000 ms      0.000 ms      0.000 ms
+SP Presetup              0.000 ms      0.000 ms      0.000 ms
+SP Setup                 0.000 ms      0.000 ms      0.000 ms
+SB Presetup              0.000 ms      0.000 ms      0.000 ms
+SB Setup                 0.000 ms      0.000 ms      0.000 ms
+Base OTs                 0.000 ms      0.000 ms      0.000 ms
+OT Extension Setup      12.376 ms     13.938 ms      3.138 ms
+KK13 OT Extension Setup      0.000 ms      0.000 ms      0.000 ms
+---------------------------------------------------------------------------
+Preprocessing Total    129.173 ms    132.633 ms     27.479 ms
+Gates Setup            138.427 ms    134.916 ms     10.853 ms
+Gates Online            73.713 ms     69.589 ms      8.863 ms
+---------------------------------------------------------------------------
+Circuit Evaluation     343.329 ms    336.992 ms     41.454 ms
+===========================================================================
+Communication with each other party:
+Sent: 1.265 MiB in 390 messages
+Received: 53.995 MiB in 2412 messages
+===========================================================================
