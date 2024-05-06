@@ -1,0 +1,280 @@
+from Compiler.GC.types import *
+from Compiler.library import start_timer, stop_timer
+
+def s4_sbox(cell):
+    assert(len(cell) == 4)
+    res = [None] * 4
+    not_x2 = ~cell[2]
+    not_x1 = ~cell[1]
+    res[3] = cell[0] ^ (~cell[3] & not_x2)
+    res[2] = cell[3] ^ (not_x2 & not_x1)
+    not_res3 = ~res[3]
+    res[1] = cell[2] ^ (not_x1 & not_res3)
+    res[0] = cell[1] ^ (not_res3 & ~res[2])
+    return res
+
+def s8_sbox(cell):
+    assert(len(cell) == 8)
+    res = [None] * 8
+    res[6] = cell[4] ^ (~cell[7] & ~cell[6])
+    not_x3 = ~cell[3]
+    not_x2 = ~cell[2]
+    res[5] = cell[0] ^ (not_x3 & not_x2)
+    res[2] = cell[6] ^ (not_x2 & ~cell[1])
+    not_res5 = ~res[5]
+    not_res6 = ~res[6]
+    res[3] = cell[1] ^ (not_res5 & not_x3)
+    res[7] = cell[5] ^ (not_res6 & not_res5)
+    not_res7 = ~res[7]
+    res[4] = cell[3] ^ (not_res7 & not_res6)
+    res[1] = cell[7] ^ (not_res7 & ~res[2])
+    res[0] = cell[2] ^ (~res[3] & ~res[1])
+    return res
+
+def subCells(state):
+    assert(len(state) == 16)
+    for i in range(len(state)):
+        if len(state[i]) == 4:
+            state[i] = s4_sbox(state[i])
+        elif len(state[i]) == 8:
+            state[i] = s8_sbox(state[i])
+        else:
+            raise NotImplemented
+    return state
+
+ROUND_CONSTANTS = [
+    0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3E, 0x3D, 0x3B, 0x37, 0x2F, 0x1E, 0x3C, 0x39, 0x33, 0x27, 0x0E,
+    0x1D, 0x3A, 0x35, 0x2B, 0x16, 0x2C, 0x18, 0x30, 0x21, 0x02, 0x05, 0x0B, 0x17, 0x2E, 0x1C, 0x38,
+    0x31, 0x23, 0x06, 0x0D, 0x1B, 0x36, 0x2D, 0x1A, 0x34, 0x29, 0x12, 0x24, 0x08, 0x11, 0x22, 0x04,
+    0x09, 0x13, 0x26, 0x0C, 0x19, 0x32, 0x25, 0x0A
+]
+assert(len(ROUND_CONSTANTS) == 56)
+
+
+def addRoundConstants(state, r):
+    assert(len(state) == 16)
+    if len(state[0]) == 4 or len(state[0]) == 8:
+        ONE = 2**(state[0][0].n)-1
+        c = ROUND_CONSTANTS[r]
+        # s_0 xor c_0
+        for i in range(4):
+            if ((c >> i) & 0x1) > 0:
+                state[0][i] ^= ONE
+        # s_4 xor c_1
+        if ((c >> 4) & 0x1) > 0:
+            state[4][0] ^= ONE
+        if ((c >> 5) & 0x1) > 0:
+            state[4][1] ^= ONE
+        # s_8 xor 0x2
+        state[8][1] ^= ONE
+        return state
+    else:
+        raise NotImplemented
+
+def addRoundKey(state, tk):
+    assert(len(state) == 16)
+    # xor the first two rows
+    for i in range(8):
+        for j in range(len(state[i])):
+            for k in range(len(tk)):
+                state[i][j] ^= tk[k][i][j]
+    return state
+
+ROUND_KEY_PERMUTATION = [9, 15, 8, 13, 10, 14, 12, 11, 0, 1, 2, 3, 4, 5, 6, 7]
+def updateRoundKey(tk):
+    new_tk = []
+    for ti in tk:
+        new_tk.append([ti[ROUND_KEY_PERMUTATION[i]] for i in range(len(ti))])
+    if len(new_tk) >= 2:
+        # apply LFSR2 to the first two rows of TK2
+        for i in range(8):
+            if len(new_tk[1][i]) == 4:
+                x = new_tk[1][i]
+                new_tk[1][i] = [x[3] ^ x[2], x[0], x[1], x[2]]
+            elif len(new_tk[1][i]) == 8:
+                x = new_tk[1][i]
+                new_tk[1][i] = [x[7] ^ x[5], x[0], x[1], x[2], x[3], x[4], x[5], x[6]]
+            else:
+                raise NotImplemented
+    
+    if len(new_tk) >= 3:
+        # apply LFSR3 to the first two rows of TK3
+        for i in range(8):
+            if len(new_tk[2][i]) == 4:
+                x = new_tk[2][i]
+                new_tk[2][i] = [x[1], x[2], x[3], x[0] ^ x[3]]
+            elif len(new_tk[2][i]) == 8:
+                x = new_tk[2][i]
+                new_tk[2][i] = [x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[0] ^ x[6]]
+            else:
+                raise NotImplemented
+    return new_tk
+
+SHIFT_ROWS_PERMUTATION = [0, 1, 2, 3, 7, 4, 5, 6, 10, 11, 8, 9, 13, 14, 15, 12]
+def shiftRows(state):
+    assert(len(state) == 16)
+    new_state = [state[SHIFT_ROWS_PERMUTATION[i]] for i in range(len(state))]
+    return new_state
+
+MIX_COLUMNS_MATRIX = [1, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0]
+def mixColumns(state):
+    new_state = [None] * 16
+    for i in range(4):
+        for j in range(4):
+            to_xor = [state[4*k+j] for k in range(4) if MIX_COLUMNS_MATRIX[4*i+k] > 0]
+            if len(to_xor) == 1:
+                new_state[4*i+j] = to_xor[0]
+            elif len(to_xor) == 2:
+                new_state[4*i+j] = [a ^ b for (a,b) in zip(to_xor[0], to_xor[1])]
+            elif len(to_xor) == 3:
+                new_state[4*i+j] = [a ^ b ^ c for (a,b,c) in zip(to_xor[0], to_xor[1], to_xor[2])]
+            else:
+                raise NotImplemented
+    return new_state
+
+def expand_key(tk, rounds):
+    schedule = []
+    for r in range(rounds):
+        schedule.append(tk)
+        tk = updateRoundKey(tk)
+    return schedule
+
+def skinny(state, tk_schedule, rounds):
+    state = list(list(cell) for cell in state)
+    for r in range(rounds):
+        state = subCells(state)
+        state = addRoundConstants(state, r)
+        state = addRoundKey(state, tk_schedule[r])
+        state = shiftRows(state)
+        state = mixColumns(state)
+        
+    return state
+
+def bitslice_schedule(sbN, schedule):
+    return [ [ [[sbN.bit_compose([b] * sbN.n) for b in cell] for cell in rki] for rki in rk] for rk in schedule]
+
+def bitslice_block(sbN, blocks, cellsize):
+    return [[sbN.bit_compose([blocks[n][i][j] for n in range(len(blocks))]) for j in range(cellsize)] for i in range(16)]
+
+def un_bitslice_block(blocks, cellsize, n_blocks):
+    res = [ [ [None] * cellsize for i in range(16)] for n in range(n_blocks)]
+    for i in range(16):
+        for j in range(cellsize):
+            bits = blocks[i][j].bit_decompose()
+            for n in range(n_blocks):
+                res[n][i][j] = bits[n]
+    return res
+
+def skinny_64_64(block, key):
+    assert len(block) == 16
+    assert len(key) == 16
+    schedule = expand_key([key], 32)
+    return skinny(block, schedule, 32)
+
+def skinny_64_64_N(blocks, key):
+    n_blocks = len(blocks)
+    sbN = sbits.get_type(n_blocks)
+    assert len(key) == 16
+    schedule = expand_key([key], 32)
+    schedule_block = bitslice_schedule(sbN, schedule)
+    sbit_block = bitslice_block(sbN, blocks, 4)
+    ciphertexts = skinny(sbit_block, schedule_block, 32)
+    return un_bitslice_block(ciphertexts, 4, n_blocks)
+
+def skinny_64_128(block, tk1, tk2):
+    assert len(block) == 16
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    schedule = expand_key([tk1, tk2], 36)
+    return skinny(block, schedule, 36)
+
+def skinny_64_128_N(blocks, tk1, tk2):
+    n_blocks = len(blocks)
+    sbN = sbits.get_type(n_blocks)
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    schedule = expand_key([tk1, tk2], 36)
+    schedule_block = bitslice_schedule(sbN, schedule)
+    sbit_block = bitslice_block(sbN, blocks, 4)
+    ciphertexts = skinny(sbit_block, schedule_block, 36)
+    return un_bitslice_block(ciphertexts, 4, n_blocks)
+
+def skinny_64_192(block, tk1, tk2, tk3):
+    assert len(block) == 16
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    assert len(tk3) == 16
+    schedule = expand_key([tk1, tk2, tk3], 40)
+    return skinny(block, schedule, 40)
+
+def skinny_64_192_N(blocks, tk1, tk2, tk3):
+    n_blocks = len(blocks)
+    sbN = sbits.get_type(n_blocks)
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    assert len(tk3) == 16
+    schedule = expand_key([tk1, tk2, tk3], 40)
+    schedule_block = bitslice_schedule(sbN, schedule)
+    sbit_block = bitslice_block(sbN, blocks, 4)
+    ciphertexts = skinny(sbit_block, schedule_block, 40)
+    return un_bitslice_block(ciphertexts, 4, n_blocks)
+
+def skinny_128_128(block, key):
+    assert len(block) == 16
+    assert len(key) == 16
+    schedule = expand_key([key], 40)
+    return skinny(block, schedule, 40)
+
+def skinny_128_128_N(blocks, key):
+    n_blocks = len(blocks)
+    sbN = sbits.get_type(n_blocks)
+    assert len(blocks[0]) == 16
+    assert len(blocks[0][0]) == 8
+    assert len(key) == 16
+    schedule = expand_key([key], 40)
+    schedule_block = bitslice_schedule(sbN, schedule)
+    sbit_block = bitslice_block(sbN, blocks, 8)
+    res = skinny(sbit_block, schedule_block, 40)
+    return un_bitslice_block(res, 8, n_blocks)
+
+def skinny_128_256(block, tk1, tk2):
+    assert len(block) == 16
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    schedule = expand_key([tk1, tk2], 48)
+    return skinny(block, schedule, 48)
+
+def skinny_128_256_N(blocks, tk1, tk2):
+    n_blocks = len(blocks)
+    sbN = sbits.get_type(n_blocks)
+    assert len(blocks[0]) == 16
+    assert len(blocks[0][0]) == 8
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    schedule = expand_key([tk1, tk2], 48)
+    schedule_block = bitslice_schedule(sbN, schedule)
+    sbit_block = bitslice_block(sbN, blocks, 8)
+    res = skinny(sbit_block, schedule_block, 48)
+    return un_bitslice_block(res, 8, n_blocks)
+
+def skinny_128_384(block, tk1, tk2, tk3):
+    assert len(block) == 16
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    assert len(tk3) == 16
+    schedule = expand_key([tk1, tk2, tk3], 56)
+    return skinny(block, schedule, 56)
+
+def skinny_128_384_N(blocks, tk1, tk2, tk3):
+    n_blocks = len(blocks)
+    sbN = sbits.get_type(n_blocks)
+    assert len(blocks[0]) == 16
+    assert len(blocks[0][0]) == 8
+    assert len(tk1) == 16
+    assert len(tk2) == 16
+    assert len(tk3) == 16
+    schedule = expand_key([tk1, tk2, tk3], 56)
+    schedule_block = bitslice_schedule(sbN, schedule)
+    sbit_block = bitslice_block(sbN, blocks, 8)
+    res = skinny(sbit_block, schedule_block, 56)
+    return un_bitslice_block(res, 8, n_blocks)
