@@ -67,6 +67,131 @@ The circuit files in the Bristol Fashion format for the primitives SKINNY, MANTI
 transpiler script from MP-SPDZ (human readable) bytecode to the Bristol Fashion format. More information and how to prepare a `.mpc` file for transpiling
 can be obtained by running `python a2bristol.py -h`.
 
+# A Complete Example
+
+In the following, we illustrate how the round function of the block cipher [SKINNY-64-128](https://doi.org/10.1007/978-3-662-53008-5_5) can be evaluated using the garbling scheme. For this, we assume that the key *k* and message *m* are secret-shared between the two parties. We first give an overview of all operations and then detail each step.
+
+First, one party, the garbler, creates a garbled circuit that corresponds to the computation of the round function, which is shown below.
+![Illustration of the round function of the SKINNY block cipher](figures/skinny_round_function.jpg)
+[Image from [SKINNY-64-128](https://doi.org/10.1007/978-3-662-53008-5_5)]
+
+The garbled circuit is sent to the second party, the evaluator. Next, both parties obtain their input, e.g., garbler and evaluator hold $[k]_G$ and $[k]_E$ which are secret shares of the key *k* where $k = [k]_G \oplus [k]_E$, and the message *m* from a client as $[m]_G$ and $[m]_E$.
+
+Now, the evaluator receives wire labels corresponding to the garbler's input and also receives wire labels corresponding to the evaluator's input via [oblivious transfer](https://en.wikipedia.org/wiki/Oblivious_transfer).
+
+The evaluator evaluates the circuit, and obtains the output wire labels of the SKINNY round function. The whole process is shown below.
+
+![Illustration of the whole process](figures/overview.png)
+
+We now detail each step and also give a code snippet to showcase the implementation.
+The only pre-requisites that are required are $lsb_4(\cdot)$ which returns the 4 least significant bits of the given bitstring and $H(\cdot)$ which is a 4-TCCR hash function.
+
+## Step 1: Garbling the circuit
+The garbler chooses 4 secret offset values, $R_0, \dots, R_3$ (since SKINNY's S-box is a 4-bit to 4-bit function) as well as 16 wire labels $W_0, \dots, W_{15}$ for the state. Each offset value has unique 4 least significant bits, e.g. $R_0$=\<random\>1000, $R_1$=\<random\>0100, etc.
+
+```python
+# secret offset values are chosen automatically
+w0 = sbits.new(inp0, single_wire_n=4)
+...
+w15 = sbits.new(inp15, single_wire_n=4)
+```
+
+### Garbling the S-boxes
+In the SKINNY round function, the S-box is applied to each of the 16 cells. The S-box is the following substitution table, mapping the input (top row) to the output (bottom row):
+
+| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | a | b | c | d | e | f |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| c | 6 | 9 | 0 | 1 | a | 2 | b | 3 | 8 | 5 | d | 4 | e | 7 | f |
+
+For input wire $W_i$ (i from 0 to 15), the garbler creates 16 ciphertexts.
+
+1. The garbler chooses a random output label $W_i'$.
+2. For each *x* from 0..15,
+   - the garbler computes $\tilde c = H(W_i \oplus x_0 R_0 \oplus x_1 R_1 \oplus x_2 R_2 \oplus x_3 R_3) \oplus W_i' \oplus SBOX(x) \cdot R$.
+
+     $x_0, \dots, x_3$ are the individual bits of *x*, and SBOX(x) denotes the value from the substitution table at index *x*, e.g. if *x = 5*, the garbler computes
+     $H(W_i \oplus R_0 \oplus R_2) \oplus W_i' \oplus R_1 \oplus R_3$ (since x=1010 and SBOX(x)=0101)
+   - the garbler saves the resulting ciphertext at index $lsb_4(W_i) \oplus x$, so GC[$lsb_4(W_i) \oplus x$] = $\tilde c$.
+
+In our MP-SPDZ extension, `proj(truth table, output size)` generates a projection gate.
+```python
+w0_prime = w0.proj([0xc, 0x6, 0x9, 0x0, 0x1, 0xa, 0x2, 0xb, 0x3, 0x8, 0x5, 0xd, 0x4, 0xe, 0x7, 0xf], 4)
+...
+w15_prime = w15.proj([0xc, 0x6, 0x9, 0x0, 0x1, 0xa, 0x2, 0xb, 0x3, 0x8, 0x5, 0xd, 0x4, 0xe, 0x7, 0xf], 4)
+``` 
+
+### Garbling the linear layers
+All remaining operations in the SKINNY round function are linear. For example, the step to add round constants will add public constants to some of the cells. This means that the garbler sets $W_{AC,i} = W_i' \oplus rc \cdot R$ where *rc* is the round constant.
+
+The round key addition layer only uses XOR but touches only the first 8 cells. So the garbler sets $W_{ART,i} = W_{AC,i} \oplus W_{RK,i}$ for *i*=0..7 and $W_{ART,i} = W_{AC,i}$ for the remaining *i*.
+
+The shift rows operation doesn't need any operation from the garbler. We just rename wire variables, e.g. for the second row $W_{SR,4} = W_{ART,5}$, $W_{SR,5} = W_{ART,6}$, $W_{SR,6} = W_{ART,7}$, $W_{SR,7} = W_{ART,4}$.
+
+Finally, for MixColumns, some cells are XORed together. Just as in the round key addition, this only uses XOR.
+
+In the code, the linear operations are straight-forward
+```python
+# Add round constants
+w_art0 = w0_prime ^ 0xf
+...
+# Shift rows
+w_sr4 = w_art5
+w_sr5 = w_art6
+w_sr6 = w_art7
+w_sr7 = w_art4
+...
+# Mix Columns
+w_mc0 = w_sr0 ^ w_sr8 ^ w_sr12
+```
+
+This concludes the garbling. The garbler sends GC[0], ..., GC[15] for each S-box to the evaluator (for one SKINNY round 16*16=256 ciphertexts).
+
+This phase is independent of the input! Thus, it can happen beforehand and many operations can be batched for optimal performance.
+
+## Step 2: Obtaining inputs
+
+Let's assume that garbler and evaluator each have a XOR-share of the key and message. We only show how the evaluator obtains the input wire labels for the message. For the key, this is analogous.
+
+The evaluator splits the share of the message $[m]_E$ into 4-bit chunks, say $m_0, \dots, m_{15}$. For each chunk, the evaluator is the receiver of 4 instances of 1 out of 2 oblivious transfer protocols (OTs). In the first OT, the evaluator sends bit 0 of the chunk, in the second bit 1, etc.
+The garbler is the sender in the OTs and gives a fresh random label or the random label XOR $R_0$ (for the first OT), $R_1$ (for the second OT), etc.
+
+The following picture shows the OTs for $m_3$.
+
+![Illustration of the OT step](figures/ot.png)
+
+To obtain the evaluation label $W_{E,i}^*$ of cell *i*, the evaluator computes $W_{E,i}^* = W_{m_i,0}^* \oplus W_{m_i,1}^* \oplus W_{m_i, 2}^* \oplus W_{m_i, 3}^*$.
+
+The garbler also splits their input share $[m]_G$ into 4-bit chunks. For each chunk, it chooses a the wire label $W_{G,i} = W_{m_i,0} \oplus W_{m_i,1} \oplus W_{m_i, 2} \oplus W_{m_i, 3} \oplus W_i$ and sends $W_{G,i}^* = W_{G,i} \oplus m_{i,0} R_0 \oplus m_{i,1} R_1 \oplus m_{i,2} R_2 \oplus m_{i,3} R_3$ to the evaluator where $m_{i,j}$ denotes the j-th bit of the i-th 4-bit chunk.
+
+## Step 3: Evaluating the circuit
+Now the evaluator has obtained all required information to start evaluating the circuit. It first combines the shares of the message to obtain an evaluation label for each cell in SKINNY's state: $W_i^* = W_{G,i}^* \oplus W_{E,i}^*$.
+
+### Evaluating the S-boxes
+Let GC[0], ..., GC[15] denote the ciphertexts that are associated with the i-th S-box.
+The evaluator picks the ciphertext at index $lsb_4(W_i^*)$ and decrypts the next evaluation label $W_i^{\prime*} = H(W_i^*) \oplus $ GC[$lsb_4(W_i^*)$]. Note here that evaluation only requires one decryption (= 4-TCCR hash function call)!
+
+### Evaluating the linear layers
+- For the add round constants step, the evaluator does not need to do anyting, it sets $W_{AC,i}^* = W_i^{\prime*}$.
+- For the round key addition, it XORs the evaluation labels, i.e., $W_{ART,i}^* = W_{AC,i}^* \oplus W_{RK,i}^*$.
+- For the shift rows operation, the evaluator renames the variables in the same way as the garbler did.
+- For MixColumns, evaluation labels are XORed, e.g., $W_{MC,0}^* = W_{SR,0}^* \oplus W_{SR,8}^* \oplus W_{SR,12}^*$.
+
+
+### Obtaining the output
+Now the evaluator holds evaluation labels for the state values at the end of the SKINNY round function.
+If this is the last round and the evaluator is supposed to receive the output, then the garbler also sends decoding information $d_i = lsb_4(W_{MC,i})$, i.e., the 4 least significant bits of the wire to be revealed, when sending the garbled circuit ciphertexts.
+
+Now, the evaluator obtains the plaintext 4 bit by $lsb_4(W_{MC,i}^*) \oplus d_i$.
+
+## Notes and further reading
+Of course the procedure explained above has been simplified and does not show how SKINNY's keyschedule is implemented. Appendix B-G contains further information.
+
+The input to $H(\cdot)$ would also take a tweak (for example a unique counter).
+Furthermore, it is possible to reduce the number of ciphertexts that are sent per S-box by one. This is a standard technique called *row-reduction* and details can be found in the paper.
+
+While the code snippets show parts of the SKINNY implementation, the snippets are far from complete. The full implementation that was also used for the benchmark in the paper is found in [Programs/Source/skinny_n_proj.mpc](Programs/Source/skinny_n_proj.mpc).
+
+
 # Multi-Protocol SPDZ [![Documentation Status](https://readthedocs.org/projects/mp-spdz/badge/?version=latest)](https://mp-spdz.readthedocs.io/en/latest/?badge=latest) [![Build Status](https://dev.azure.com/data61/MP-SPDZ/_apis/build/status/data61.MP-SPDZ?branchName=master)](https://dev.azure.com/data61/MP-SPDZ/_build/latest?definitionId=7&branchName=master) [![Gitter](https://badges.gitter.im/MP-SPDZ/community.svg)](https://gitter.im/MP-SPDZ/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 Software to benchmark various secure multi-party computation (MPC)
