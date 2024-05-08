@@ -75,7 +75,7 @@ First, one party, the garbler, creates a garbled circuit that corresponds to the
 ![Illustration of the round function of the SKINNY block cipher](figures/skinny_round_function.jpg)
 [Image from [SKINNY-64-128](https://doi.org/10.1007/978-3-662-53008-5_5)]
 
-The garbled circuit is sent to the second party, the evaluator. Next, both parties obtain their input, e.g., garbler and evaluator hold $[k]_G$ and $[k]_E$ which are secret shares of the key *k* where $k = [k]_G \oplus [k]_E$, and the message *m* from a client as $[m]_G$ and $[m]_E$.
+The garbled circuit is sent to the second party, the evaluator. Next, both parties obtain their input, e.g., garbler and evaluator hold $[k]_G$ and $[k]_E$, respectively, which are secret shares of the key *k* where $k = [k]_G \oplus [k]_E$, and the message *m* from a client as $[m]_G$ and $[m]_E$.
 
 Now, the evaluator receives wire labels corresponding to the garbler's input and also receives wire labels corresponding to the evaluator's input via [oblivious transfer](https://en.wikipedia.org/wiki/Oblivious_transfer).
 
@@ -87,7 +87,7 @@ We now detail each step and also give a code snippet to showcase the implementat
 The only pre-requisites that are required are $lsb_4(\cdot)$ which returns the 4 least significant bits of the given bitstring and $H(\cdot)$ which is a 4-TCCR hash function.
 
 ## Step 1: Garbling the circuit
-The garbler chooses 4 secret offset values, $R_0, \dots, R_3$ (since SKINNY's S-box is a 4-bit to 4-bit function) as well as 16 wire labels $W_0, \dots, W_{15}$ for the state. Each offset value has unique 4 least significant bits, e.g. $R_0$=\<random\>1000, $R_1$=\<random\>0100, etc.
+The garbler chooses 4 secret offset values, $R_0, \dots, R_3$ (since SKINNY's S-box is a 4-bit to 4-bit function) as well as 16 wire labels $W_0, \dots, W_{15}$ for the state. Each offset value has unique 4 least significant bits, e.g., $R_0$=\<random\>1000, $R_1$=\<random\>0100, etc.
 
 ```python
 # secret offset values are chosen automatically
@@ -109,7 +109,7 @@ For input wire $W_i$ (i from 0 to 15), the garbler creates 16 ciphertexts.
 2. For each *x* from 0..15,
    - the garbler computes $\tilde c = H(W_i \oplus x_0 R_0 \oplus x_1 R_1 \oplus x_2 R_2 \oplus x_3 R_3) \oplus W_i' \oplus SBOX(x) \cdot R$.
 
-     $x_0, \dots, x_3$ are the individual bits of *x*, and SBOX(x) denotes the value from the substitution table at index *x*, e.g. if *x = 5*, the garbler computes
+     $x_0, \dots, x_3$ are the individual bits of *x*, and SBOX(x) denotes the value from the substitution table at index *x*, e.g., if *x = 5*, the garbler computes
      $H(W_i \oplus R_0 \oplus R_2) \oplus W_i' \oplus R_1 \oplus R_3$ (since x=1010 and SBOX(x)=0101)
    - the garbler saves the resulting ciphertext at index $lsb_4(W_i) \oplus x$, so GC[$lsb_4(W_i) \oplus x$] = $\tilde c$.
 
@@ -123,13 +123,13 @@ w15_prime = w15.proj([0xc, 0x6, 0x9, 0x0, 0x1, 0xa, 0x2, 0xb, 0x3, 0x8, 0x5, 0xd
 ### Garbling the linear layers
 All remaining operations in the SKINNY round function are linear. For example, the step to add round constants will add public constants to some of the cells. This means that the garbler sets $W_{AC,i} = W_i' \oplus rc \cdot R$ where *rc* is the round constant.
 
-The round key addition layer only uses XOR but touches only the first 8 cells. So the garbler sets $W_{ART,i} = W_{AC,i} \oplus W_{RK,i}$ for *i*=0..7 and $W_{ART,i} = W_{AC,i}$ for the remaining *i*.
+The round key addition layer only uses XOR and touches only the first 8 cells. So the garbler sets $W_{ART,i} = W_{AC,i} \oplus W_{RK,i}$ for *i*=0..7 and $W_{ART,i} = W_{AC,i}$ for the remaining *i*.
 
-The shift rows operation doesn't need any operation from the garbler. We just rename wire variables, e.g. for the second row $W_{SR,4} = W_{ART,5}$, $W_{SR,5} = W_{ART,6}$, $W_{SR,6} = W_{ART,7}$, $W_{SR,7} = W_{ART,4}$.
+The shift rows operation doesn't need any operation from the garbler. We just rename wire variables, e.g., for the second row $W_{SR,4} = W_{ART,5}$, $W_{SR,5} = W_{ART,6}$, $W_{SR,6} = W_{ART,7}$, $W_{SR,7} = W_{ART,4}$.
 
 Finally, for MixColumns, some cells are XORed together. Just as in the round key addition, this only uses XOR.
 
-In the code, the linear operations are straight-forward
+In the code, the linear operations are straightforward
 ```python
 # Add round constants
 w_art0 = w0_prime ^ 0xf
